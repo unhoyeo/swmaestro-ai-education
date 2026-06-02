@@ -8,7 +8,7 @@ uploaded_file = st.file_uploader("계약서 파일을 업로드하세요", type=
 
 contract_type = st.selectbox(
     "계약 유형을 선택하세요",
-    ["근로", "전세", "외주", "이용약관", "기타"],
+    ["자동 감지", "근로", "전세", "외주", "이용약관", "기타"],
 )
 
 RISK_COLOR = {"high": "🔴", "medium": "🟡", "low": "🟢"}
@@ -35,6 +35,9 @@ if st.button("분석 시작"):
 
 if "result" in st.session_state:
     result = st.session_state["result"]
+
+    if result.get("detected_type"):
+        st.caption(f"자동 감지된 계약 유형: **{result['detected_type']}**")
 
     st.subheader("전체 요약")
     st.info(result["summary"])

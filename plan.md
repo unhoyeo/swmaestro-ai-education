@@ -1,110 +1,67 @@
 # 계약문서 위험조항 분석 Agent - 구현 계획
 
 ## Phase 1: 프로젝트 초기 환경 세팅 [완료]
+## Phase 2: Upstage Document Parse 연동 + 분석 파이프라인 구현 [완료]
 
 ---
 
-## Phase 2: Upstage Document Parse 연동 + 분석 파이프라인 구현
+## Phase 3: 계약 유형 확인 + 유형별 위험 기준 적용
 
-### 전체 데이터 흐름
+### 구현할 2가지
 
-```
-[사용자] 파일 업로드 + 계약 유형 선택
-    ↓
-[frontend/app.py] POST /analyze 호출
-    ↓
-[main.py] /analyze 엔드포인트
-    ↓
-[extractor.py] Upstage Document Parse API → 텍스트 추출 → 조항 분리
-    ↓
-[analyzer.py] LangChain LLM → 각 조항 위험 분석
-    ↓
-[classifier.py] 위험도 분류 (high / medium / low)
-    ↓
-[summarizer.py] 전체 요약 생성
-    ↓
-[frontend/app.py] 결과 테이블 + 요약 표시
-```
+#### 1. detect_contract_type(text) 구현
+- 계약서 전문 앞 2000자만 LLM에 전달해 비용 절감
+- gpt-4o-mini + LangChain LCEL (기존 analyze_clauses와 동일 방식)
+- 반환값을 `["근로", "전세", "외주", "이용약관", "기타"]` 중 하나로 강제
+  - LLM 응답이 5개 목록에 없으면 "기타" 반환
 
----
+#### 2. 유형별 위험 기준 주입
+- `analyzer.py` 내 `RISK_CRITERIA` dict 상수로 정의 (별도 파일 X)
+- `analyze_clauses()` 프롬프트에 해당 유형의 기준 항목을 주입
+- 기준 내용:
 
-### 변경/추가 파일 목록
-
-| 파일 | 변경 내용 |
+| 유형 | 점검 항목 |
 |------|-----------|
-| `backend/requirements.txt` | `langchain-community`, `openai` 추가 |
-| `backend/services/extractor.py` | Upstage Document Parse API 호출로 텍스트 추출, 조항 분리 구현 |
-| `backend/services/analyzer.py` | LangChain + ChatOpenAI로 조항별 위험 분석 구현 |
-| `backend/services/classifier.py` | 분석 결과에서 위험도(high/medium/low) 분류 구현 |
-| `backend/services/summarizer.py` | 위험 조항 목록 전체 요약 구현 |
-| `backend/main.py` | `POST /analyze` 엔드포인트 추가 |
-| `frontend/app.py` | 분석 결과(위험 조항 테이블 + 요약) 표시 구현 |
-
-> `explainer.py`는 이번 Phase에서 구현하지 않음 (단일 조항 상세 설명은 별도 단계)
+| 근로 | 임금/급여 지급 조건, 근로시간, 수습기간, 퇴사·해지 조건, 위약금, 비밀유지·경업금지 |
+| 전세 | 보증금 반환 조건, 특약사항, 계약 해지, 원상복구 범위, 임대인 책임 |
+| 외주 | 대금 지급 시점·조건, 지체상금/지연배상, 저작권·산출물 귀속, 유지보수 범위 |
+| 이용약관 | 자동 갱신, 과도한 위약금, 개인정보 제3자 제공, 책임 제한·면책, 일방적 해지 |
+| 기타 | 자동 갱신, 과도한 위약금, 일방적 해지, 책임 제한, 개인정보 제공 |
 
 ---
 
-### 각 파일 상세 설계
+### 결정 사항 A: detect_contract_type 파이프라인 연결 여부
 
-#### backend/services/extractor.py
-- `extract_text(file_bytes, filename)`:
-  - Upstage Document Parse REST API(`https://api.upstage.ai/v1/document-digitization`)에 `multipart/form-data`로 파일 전송
-  - 응답 JSON의 `content.text` 필드에서 전체 텍스트 반환
-- `split_clauses(text)`:
-  - 조항 번호 패턴(`제X조`, `X.`, `(X)` 등) 기준으로 텍스트를 조항 리스트로 분리
-  - 최소 길이(30자) 미만 조각은 제외
+#### 옵션 1: 함수만 구현, 파이프라인 미연결
+- **변경 범위**: `analyzer.py`만 수정 (main.py, frontend/app.py 무변경)
+- **동작**: 함수는 완성되지만 실제 분석 시 호출되지 않음. 프론트 셀렉트박스로만 유형 결정.
+- **장점**: 파일 수정 최소화, 팀원 담당 영역 완전 비침투
+- **단점**: 함수를 만들어도 실제로 쓰이지 않아 검증이 어려움
 
-#### backend/services/analyzer.py
-- `detect_contract_type(text)` — 이번 Phase에서는 프론트에서 선택한 값을 그대로 받으므로 패스
-- `analyze_clauses(clauses, contract_type)`:
-  - `ChatOpenAI(model="gpt-4o-mini")` 사용
-  - 각 조항에 대해 LangChain `PromptTemplate` + `LLMChain`으로 위험 여부·이유 분석
-  - 반환 형식: `list[dict]` — `{clause, is_risky: bool, reason: str}`
-  - 조항이 많을 경우 상위 20개만 처리 (비용 제한)
+#### 옵션 2: 프론트에 "자동 감지" 추가 → 선택 시 detect_contract_type 호출
+- **변경 범위**: `analyzer.py` + `main.py` (contract_type이 "자동 감지"이면 detect 호출) + `frontend/app.py` (셀렉트박스에 "자동 감지" 항목 추가)
+- **동작**: 사용자가 "자동 감지"를 선택하면 백엔드가 LLM으로 유형을 판별하고, 그 유형을 기준으로 위험 분석 진행. 응답에 `detected_type` 필드가 추가됨.
+- **장점**: 함수가 실제로 동작하는 것을 end-to-end로 검증 가능
+- **단점**: main.py, frontend/app.py 최소 수정 필요 (각 2~3줄 수준)
 
-#### backend/services/classifier.py
-- `classify_risk(analysis)`:
-  - `analyze_clauses` 결과를 받아 각 항목에 `risk_level` 필드 추가
-  - LLM 없이 규칙 기반: `is_risky=True`이면 reason 길이/키워드로 `high` / `medium` 분류, `False`이면 `low`
-  - 반환 형식: `list[dict]` — `{clause, is_risky, reason, risk_level}`
+**→ 내 선택을 기다립니다.**
 
-#### backend/services/summarizer.py
-- `summarize(classified_results)`:
-  - `ChatOpenAI(model="gpt-4o-mini")` 사용
-  - 위험 조항(`is_risky=True`)만 추려 한국어 요약 2~3문장 생성
+---
 
-#### backend/main.py — POST /analyze
-```
-Request: multipart/form-data
-  - file: UploadFile
-  - contract_type: str (Form)
+### 수정 파일 요약
 
-Response: JSON
-  {
-    "contract_type": str,
-    "clauses": [{ clause, is_risky, reason, risk_level }],
-    "summary": str
-  }
-```
-
-#### frontend/app.py
-- 분석 버튼 클릭 시 `POST /analyze`에 파일 + 계약 유형 전송
-- 응답 수신 후:
-  - 요약(summary) 텍스트 박스 표시
-  - 위험 조항 테이블(`st.dataframe`): 조항 텍스트, 위험도, 이유
-  - 위험도별 색상 구분 (high=빨강, medium=노랑, low=초록)
+| 파일 | 옵션 1 | 옵션 2 |
+|------|--------|--------|
+| `backend/services/analyzer.py` | ✅ 수정 | ✅ 수정 |
+| `backend/main.py` | ❌ 무변경 | ✅ 최소 수정 (if문 3줄) |
+| `frontend/app.py` | ❌ 무변경 | ✅ 최소 수정 (선택지 1개 추가) |
 
 ---
 
 ### 작업 단계
 
-1. plan.md 작성 → 승인 대기
-2. `backend/requirements.txt` 업데이트
-3. `backend/services/extractor.py` 구현
-4. `backend/services/analyzer.py` 구현
-5. `backend/services/classifier.py` 구현
-6. `backend/services/summarizer.py` 구현
-7. `backend/main.py` `/analyze` 엔드포인트 추가
-8. `frontend/app.py` 결과 표시 구현
-9. `docker compose up --build` 재검증
-10. `feat/2-analysis-pipeline` 브랜치 커밋
+1. [완료] 파일 읽기
+2. [완료] plan.md 작성 → 결정 사항 A 승인 대기
+3. 옵션 선택 확인 후 구현
+4. `docker compose up --build` 검증
+5. `feat/3-contract-type-criteria` 브랜치 커밋
