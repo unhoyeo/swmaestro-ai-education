@@ -1,10 +1,16 @@
 from fastapi import FastAPI, UploadFile, File, Form
+from pydantic import BaseModel
 from services.extractor import extract_text, split_clauses
 from services.analyzer import analyze_clauses
 from services.classifier import classify_risk
 from services.summarizer import summarize
+from services.explainer import explain
 
 app = FastAPI()
+
+
+class ExplainRequest(BaseModel):
+    clause: str
 
 
 @app.get("/")
@@ -25,3 +31,8 @@ async def analyze(file: UploadFile = File(...), contract_type: str = Form(...)):
         "clauses": classified,
         "summary": summary,
     }
+
+
+@app.post("/explain")
+def explain_clause(body: ExplainRequest):
+    return {"explanation": explain(body.clause)}

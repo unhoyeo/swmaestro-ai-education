@@ -31,22 +31,44 @@ if st.button("분석 시작"):
                 st.error(f"분석 실패: {e}")
                 st.stop()
 
-        st.subheader("전체 요약")
-        st.info(result["summary"])
+        st.session_state["result"] = result
 
-        st.subheader("조항별 분석 결과")
+if "result" in st.session_state:
+    result = st.session_state["result"]
+
+    st.subheader("전체 요약")
+    st.info(result["summary"])
+
+    risky_clauses = [c for c in result["clauses"] if c["is_risky"]]
+
+    st.subheader("조항별 분석 결과")
+    if risky_clauses:
         rows = [
             {
                 "위험도": RISK_COLOR.get(c["risk_level"], "") + " " + c["risk_level"].upper(),
-                "조항": c["clause"][:120] + ("..." if len(c["clause"]) > 120 else ""),
+                "조항 (앞 120자)": c["clause"][:120] + ("..." if len(c["clause"]) > 120 else ""),
                 "분석 이유": c["reason"],
             }
-            for c in result["clauses"]
-            if c["is_risky"]
+            for c in risky_clauses
         ]
+        st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
-        if rows:
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.success("위험 조항이 발견되지 않았습니다.")
+        st.subheader("조항 상세 설명")
+        for i, clause in enumerate(risky_clauses):
+            label = f"{RISK_COLOR.get(clause['risk_level'], '')} [{clause['risk_level'].upper()}] {clause['clause'][:60]}..."
+            with st.expander(label):
+                st.markdown(f"**전체 조항**\n\n{clause['clause']}")
+                if st.button("상세 설명 보기", key=f"explain_{i}"):
+                    with st.spinner("설명 생성 중..."):
+                        try:
+                            resp = httpx.post(
+                                "http://backend:8000/explain",
+                                json={"clause": clause["clause"]},
+                                timeout=60,
+                            )
+                            resp.raise_for_status()
+                            st.markdown(resp.json()["explanation"])
+                        except Exception as e:
+                            st.error(f"설명 실패: {e}")
+    else:
+        st.success("위험 조항이 발견되지 않았습니다.")
