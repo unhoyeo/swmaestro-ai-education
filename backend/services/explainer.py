@@ -1,0 +1,2 @@
+def explain(clause):
+    pass
