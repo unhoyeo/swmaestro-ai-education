@@ -1,5 +1,6 @@
 import streamlit as st
 import httpx
+import pandas as pd
 
 st.title("계약문서 위험조항 분석 Agent")
 
@@ -10,12 +11,42 @@ contract_type = st.selectbox(
     ["근로", "전세", "외주", "이용약관", "기타"],
 )
 
+RISK_COLOR = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+
 if st.button("분석 시작"):
-    try:
-        response = httpx.get("http://backend:8000/")
-        if response.status_code == 200:
-            st.success("백엔드 연결 성공: " + str(response.json()))
+    if not uploaded_file:
+        st.warning("파일을 먼저 업로드해주세요.")
+    else:
+        with st.spinner("분석 중..."):
+            try:
+                response = httpx.post(
+                    "http://backend:8000/analyze",
+                    files={"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)},
+                    data={"contract_type": contract_type},
+                    timeout=120,
+                )
+                response.raise_for_status()
+                result = response.json()
+            except Exception as e:
+                st.error(f"분석 실패: {e}")
+                st.stop()
+
+        st.subheader("전체 요약")
+        st.info(result["summary"])
+
+        st.subheader("조항별 분석 결과")
+        rows = [
+            {
+                "위험도": RISK_COLOR.get(c["risk_level"], "") + " " + c["risk_level"].upper(),
+                "조항": c["clause"][:120] + ("..." if len(c["clause"]) > 120 else ""),
+                "분석 이유": c["reason"],
+            }
+            for c in result["clauses"]
+            if c["is_risky"]
+        ]
+
+        if rows:
+            df = pd.DataFrame(rows)
+            st.dataframe(df, use_container_width=True)
         else:
-            st.error("백엔드 응답 오류: " + str(response.status_code))
-    except Exception as e:
-        st.error("백엔드 연결 실패: " + str(e))
+            st.success("위험 조항이 발견되지 않았습니다.")
