@@ -12,7 +12,7 @@ def summarize(classified_results: list[dict]) -> str:
     clause_summary = "\n".join(
         f"- [{r['risk_level'].upper()}] {r['reason']}" for r in risky
     )
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
+    llm = ChatOpenAI(model="solar-pro", temperature=0, api_key=os.getenv("UPSTAGE_API_KEY"), base_url="https://api.upstage.ai/v1")
     prompt = PromptTemplate(
         input_variables=["clauses"],
         template=(

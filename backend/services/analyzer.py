@@ -15,7 +15,7 @@ RISK_CRITERIA = {
 
 
 def detect_contract_type(text: str) -> str:
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
+    llm = ChatOpenAI(model="solar-pro", temperature=0, api_key=os.getenv("UPSTAGE_API_KEY"), base_url="https://api.upstage.ai/v1")
     prompt = PromptTemplate(
         input_variables=["text"],
         template=(
@@ -31,7 +31,7 @@ def detect_contract_type(text: str) -> str:
 
 
 def analyze_clauses(clauses: list[str], contract_type: str) -> list[dict]:
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
+    llm = ChatOpenAI(model="solar-pro", temperature=0, api_key=os.getenv("UPSTAGE_API_KEY"), base_url="https://api.upstage.ai/v1")
     criteria = RISK_CRITERIA.get(contract_type, RISK_CRITERIA["기타"])
     prompt = PromptTemplate(
         input_variables=["contract_type", "criteria", "clause"],

@@ -5,7 +5,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 
 def explain(clause: str) -> str:
-    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, api_key=os.getenv("OPENAI_API_KEY"))
+    llm = ChatOpenAI(model="solar-pro", temperature=0, api_key=os.getenv("UPSTAGE_API_KEY"), base_url="https://api.upstage.ai/v1")
     prompt = PromptTemplate(
         input_variables=["clause"],
         template=(
