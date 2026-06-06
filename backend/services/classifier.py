@@ -59,16 +59,19 @@ COMMON_HIGH_RISK_KEYWORDS = [
     "면책", "책임지지 않", "책임을 지지", "배상하지 않", "배상 책임 없",
     "손해배상 없음", "손해를 배상하지",
     # 일방적 권리
-    "일방적", "일방적으로", "사전 통보 없이", "사전 동의 없이",
+    "일방적으로", "사전 통보 없이", "사전 동의 없이",
     # 청구 불가
     "청구 불가", "청구할 수 없", "청구권 포기",
     # 해지 강경
     "해지 불가", "해지할 수 없", "취소 불가",
-    # 포기·무효
-    "포기", "권리 포기", "무효", "전적으로",
+    # 포기·무효 (구체적 표현으로 한정)
+    "권리 포기", "청구권을 포기", "계약을 무효", "당연히 무효",
     # 무제한
     "제한 없이", "제한 없는",
 ]
+
+# 부정 수식어: 키워드 매칭 후 바로 뒤에 이 표현이 오면 고위험에서 제외
+_NEGATION_SUFFIXES = ("없습니다", "없음", "없다", "않는다", "않음", "않습니다", "아니다", "아닙니다")
 
 
 def _get_keywords(contract_type: str) -> list[str]:
@@ -77,10 +80,23 @@ def _get_keywords(contract_type: str) -> list[str]:
     return COMMON_HIGH_RISK_KEYWORDS + type_kw
 
 
+def _has_keyword_without_negation(text: str, keyword: str) -> bool:
+    """텍스트에 키워드가 포함되어 있고, 키워드 직후 15자 이내에 부정 표현이 없으면 True를 반환한다."""
+    idx = text.find(keyword)
+    if idx == -1:
+        return False
+    after = text[idx + len(keyword):idx + len(keyword) + 15]
+    return not any(neg in after for neg in _NEGATION_SUFFIXES)
+
+
 def _is_high_risk(item: dict, keywords: list[str]) -> bool:
-    """reason 문장과 clause 원문 양쪽에서 고위험 키워드를 탐색한다."""
+    """reason 문장과 clause 원문 양쪽에서 고위험 키워드를 탐색한다. 부정 문맥은 제외한다."""
     targets = [item.get("reason", ""), item.get("clause", "")]
-    return any(kw in target for kw in keywords for target in targets)
+    return any(
+        _has_keyword_without_negation(target, kw)
+        for kw in keywords
+        for target in targets
+    )
 
 
 def classify_risk(analysis: list[dict], contract_type: str = "기타") -> list[dict]:
