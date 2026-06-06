@@ -46,12 +46,23 @@ COMMON_HIGH_RISK_KEYWORDS = [
 ]
 
 
-def classify_risk(analysis: list[dict]) -> list[dict]:
+def _get_keywords(contract_type: str) -> list[str]:
+    type_kw = RISK_KEYWORDS_BY_TYPE.get(contract_type, RISK_KEYWORDS_BY_TYPE["기타"])
+    return COMMON_HIGH_RISK_KEYWORDS + type_kw
+
+
+def _is_high_risk(item: dict, keywords: list[str]) -> bool:
+    targets = [item.get("reason", ""), item.get("clause", "")]
+    return any(kw in target for kw in keywords for target in targets)
+
+
+def classify_risk(analysis: list[dict], contract_type: str = "기타") -> list[dict]:
+    keywords = _get_keywords(contract_type)
     results = []
     for item in analysis:
         if not item["is_risky"]:
             risk_level = "low"
-        elif any(kw in item["reason"] for kw in COMMON_HIGH_RISK_KEYWORDS):
+        elif _is_high_risk(item, keywords):
             risk_level = "high"
         else:
             risk_level = "medium"
