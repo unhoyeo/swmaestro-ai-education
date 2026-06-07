@@ -82,6 +82,7 @@ def _get_keywords(contract_type: str) -> list[str]:
 
 def _has_keyword_without_negation(text: str, keyword: str) -> bool:
     """텍스트에 키워드가 포함되어 있고, 키워드 직후 15자 이내에 부정 표현이 없으면 True를 반환한다."""
+    text = str(text or "")
     idx = text.find(keyword)
     if idx == -1:
         return False
@@ -109,12 +110,24 @@ def classify_risk(analysis: list[dict], contract_type: str = "기타") -> list[d
     """
     keywords = _get_keywords(contract_type)
     results = []
+    if not isinstance(analysis, list):
+        return results
+
     for item in analysis:
-        if not item["is_risky"]:
+        if not isinstance(item, dict):
+            continue
+
+        normalized_item = {
+            **item,
+            "clause": str(item.get("clause") or "").strip(),
+            "is_risky": item.get("is_risky") is True,
+            "reason": str(item.get("reason") or "분석 이유가 제공되지 않았습니다.").strip(),
+        }
+        if not normalized_item["is_risky"]:
             risk_level = "low"
-        elif _is_high_risk(item, keywords):
+        elif _is_high_risk(normalized_item, keywords):
             risk_level = "high"
         else:
             risk_level = "medium"
-        results.append({**item, "risk_level": risk_level})
+        results.append({**normalized_item, "risk_level": risk_level})
     return results

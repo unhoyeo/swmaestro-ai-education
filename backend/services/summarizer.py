@@ -17,6 +17,11 @@ _RISK_PRIORITY = {"high": 0, "medium": 1, "low": 2}
 _RISK_LABELS = {"high": "높음", "medium": "중간", "low": "낮음"}
 
 
+def get_no_risk_summary() -> str:
+    """LLM 호출 없이 안전한 기본 요약을 반환한다."""
+    return _NO_RISK_SUMMARY
+
+
 def summarize(classified_results: list[dict]) -> str:
     """분류된 계약 조항을 사용자 친화적인 한국어 문장으로 요약한다."""
     risky_results = _filter_risky_results(classified_results)

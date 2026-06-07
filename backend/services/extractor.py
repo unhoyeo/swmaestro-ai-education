@@ -29,6 +29,11 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
         return preprocess_text(text)
 
     api_key = os.getenv("UPSTAGE_API_KEY")
+    if not api_key:
+        raise RuntimeError(
+            "PDF/DOCX 텍스트 추출에는 UPSTAGE_API_KEY가 필요합니다."
+        )
+
     # Upstage Document Parse API endpoint
     url = "https://api.upstage.ai/v1/document-ai/document-parse"
     
@@ -61,7 +66,10 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
                 extracted_texts.append(element_text)
 
     combined_text = "\n".join(extracted_texts)
-    return preprocess_text(combined_text)
+    text = preprocess_text(combined_text)
+    if not text:
+        raise ValueError("문서에서 텍스트를 추출하지 못했습니다.")
+    return text
 
 
 def split_clauses(text: str) -> list[str]:
@@ -80,5 +88,16 @@ def split_clauses(text: str) -> list[str]:
             continue
         if len(cleaned) >= 30:
             clauses.append(cleaned)
+
+    if not clauses:
+        fallback_parts = re.split(
+            r"\n\s*\n|(?<=[.!?])\s+(?=[가-힣A-Za-z0-9])",
+            text,
+        )
+        clauses = [
+            part.strip()
+            for part in fallback_parts
+            if len(part.strip()) >= 20
+        ]
 
     return clauses[:20]
