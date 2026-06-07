@@ -26,7 +26,7 @@ async def analyze(file: UploadFile = File(...), contract_type: str = Form(...)):
     resolved_type = detected_type or contract_type
     clauses = split_clauses(text)
     analysis = analyze_clauses(clauses, resolved_type)
-    classified = classify_risk(analysis)
+    classified = classify_risk(analysis, resolved_type)
     summary = summarize(classified)
     return {
         "contract_type": resolved_type,
