@@ -175,9 +175,9 @@ def classify_risk(analysis: list[dict], contract_type: str = "기타") -> list[d
     """
     LLM 분석 결과에 위험도(risk_level)를 추가한다.
 
-    - low:    is_risky=False
-    - high:   is_risky=True + 고위험 키워드 발견 (reason 또는 clause 원문)
-    - medium: is_risky=True + 고위험 키워드 미발견
+    - low:         is_risky=False
+    - high:        is_risky=True + 고위험 키워드 발견 (빠름, 비용 없음)
+    - high/medium: is_risky=True + 키워드 미발견 → LLM 폴백으로 판별
     """
     keywords = _get_keywords(contract_type)
     results = []
@@ -187,6 +187,6 @@ def classify_risk(analysis: list[dict], contract_type: str = "기타") -> list[d
         elif _is_high_risk(item, keywords):
             risk_level = "high"
         else:
-            risk_level = "medium"
+            risk_level = _llm_classify_risk_level(item, contract_type)
         results.append({**item, "risk_level": risk_level})
     return results
