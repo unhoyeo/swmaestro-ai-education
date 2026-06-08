@@ -1,3 +1,9 @@
+import os
+
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
+
 # 계약 유형별 고위험 키워드 — analyzer.py의 RISK_CRITERIA와 대응되는 법적 위험 표현 목록
 RISK_KEYWORDS_BY_TYPE = {
     "근로": [
@@ -119,6 +125,40 @@ def _has_keyword_without_negation(text: str, keyword: str) -> bool:
         return False
     after = text[idx + len(keyword):idx + len(keyword) + 15]
     return not any(neg in after for neg in _NEGATION_SUFFIXES)
+
+
+def _llm_classify_risk_level(item: dict, contract_type: str) -> str:
+    """키워드로 판별 불가한 위험 조항을 LLM으로 high/medium 분류한다. 오류 시 medium 반환."""
+    llm = ChatOpenAI(
+        model="solar-pro",
+        temperature=0,
+        api_key=os.getenv("UPSTAGE_API_KEY"),
+        base_url="https://api.upstage.ai/v1",
+    )
+    prompt = PromptTemplate(
+        input_variables=["contract_type", "clause", "reason"],
+        template=(
+            "당신은 계약법 전문가입니다.\n"
+            "아래는 {contract_type} 계약서에서 발견된 위험 조항과 분석 이유입니다.\n\n"
+            "[조항 원문]\n{clause}\n\n"
+            "[분석 이유]\n{reason}\n\n"
+            "이 조항의 위험도를 판단하세요:\n"
+            "- HIGH: 권리를 심각하게 침해하거나 일방적 면책·손해배상 배제·권리 박탈이 포함된 경우\n"
+            "- MEDIUM: 불리하지만 협상 가능하거나 주의가 필요한 수준인 경우\n\n"
+            "다음 중 하나로만 답하세요 (다른 말 없이 정확히):\n"
+            "HIGH / MEDIUM"
+        ),
+    )
+    chain = prompt | llm | StrOutputParser()
+    try:
+        result = chain.invoke({
+            "contract_type": contract_type,
+            "clause": item.get("clause", ""),
+            "reason": item.get("reason", ""),
+        }).strip().upper()
+        return "high" if "HIGH" in result else "medium"
+    except Exception:
+        return "medium"
 
 
 def _is_high_risk(item: dict, keywords: list[str]) -> bool:
